@@ -137,7 +137,7 @@ class _SearchTabState extends State<SearchTab>{
       final uri=Uri.https('www.googleapis.com','/youtube/v3/search',{'part':'snippet','type':'video','maxResults':'25','q':q,'regionCode':'JP','relevanceLanguage':'ja','safeSearch':'moderate','key':widget.apiKey});
       final r=await http.get(uri).timeout(const Duration(seconds:20));final data=jsonDecode(r.body) as Map<String,dynamic>;
       if(r.statusCode!=200){final msg=(data['error'] as Map<String,dynamic>?)?['message'];throw Exception(msg??'API error ${r.statusCode}');}
-      final list=(data['items'] as List<dynamic>???[]).map((x)=>Video.fromApi(x as Map<String,dynamic>)).toList();
+      final list=(data['items'] as List<dynamic>? ?? []).map((x)=>Video.fromApi(x as Map<String,dynamic>)).toList();
       if(mounted)setState(()=>results=list);
     }catch(e){if(mounted)setState(()=>error='検索できませんでした。APIキーと通信環境を確認してください。\n$e');}
     finally{if(mounted)setState(()=>loading=false);}
