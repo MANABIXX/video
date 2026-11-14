@@ -197,8 +197,9 @@ class _ShellState extends State<Shell> {
 
   @override
   Widget build(BuildContext context) {
-    if (!ready)
+    if (!ready) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Row(
@@ -460,8 +461,9 @@ class _SearchTabState extends State<SearchTab> {
           .toList();
       if (mounted) setState(() => results = list);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => error = '検索できませんでした。APIキーと通信環境を確認してください。\n$e');
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -771,16 +773,18 @@ class _OfflineTabState extends State<OfflineTab> {
         target,
         deleteOnError: true,
         onReceiveProgress: (received, total) {
-          if (mounted && total > 0)
+          if (mounted && total > 0) {
             setState(() => _progress = received / total);
+          }
         },
       );
       final contentType =
           response.headers.value(Headers.contentTypeHeader)?.toLowerCase() ??
           '';
       final file = File(target);
-      if (response.statusCode != 200 && response.statusCode != 206)
+      if (response.statusCode != 200 && response.statusCode != 206) {
         throw Exception('HTTP ${response.statusCode}');
+      }
       if (!(contentType.startsWith('video/') ||
           contentType == 'application/octet-stream')) {
         throw Exception('動画ファイルとして確認できませんでした（$contentType）');
@@ -803,11 +807,12 @@ class _OfflineTabState extends State<OfflineTab> {
       }
       if (mounted) setState(() => _downloadError = '保存できませんでした: $error');
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _downloading = false;
           _progress = 0;
         });
+      }
     }
   }
 
@@ -829,8 +834,8 @@ class _OfflineTabState extends State<OfflineTab> {
     children: [
       const _Heading('オフライン', '保存した教材動画は通信なしで再生できます'),
       const SizedBox(height: 12),
-      const Container(
-        padding: EdgeInsets.all(16),
+      Container(
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: panel,
           borderRadius: BorderRadius.all(Radius.circular(18)),
@@ -1091,8 +1096,9 @@ class _PlayerPageState extends State<PlayerPage> {
       if (current > 0 && duration > 0 && current < duration - 3) {
         final p = await SharedPreferences.getInstance();
         await p.setDouble(_progressKey, current);
-        if (mounted && (current - resumeAt).abs() > 8)
+        if (mounted && (current - resumeAt).abs() > 8) {
           setState(() => resumeAt = current);
+        }
       } else if (duration > 0 && current >= duration - 3) {
         final p = await SharedPreferences.getInstance();
         await p.remove(_progressKey);
