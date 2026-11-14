@@ -9,6 +9,9 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   http: ^1.2.2
+  dio: ^5.8.0+1
+  path_provider: ^2.1.5
+  video_player: ^2.9.5
   shared_preferences: ^2.5.3
   youtube_player_iframe: ^6.0.2
 dev_dependencies:
