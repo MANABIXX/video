@@ -12,6 +12,7 @@ Flutter製の学習向けYouTubeクライアント。軽快なダークUIで、�
 - 再生位置の自動保存・続きから再生
 - YouTube側が提供する範囲での再生速度変更
 - Android Release APKのGitHub Actionsビルド
+- 自分が所有・配布許可を得たMP4/M4V/MOV/WebMの端末内保存とオフライン再生
 
 ## Setup
 1. Google CloudでYouTube Data API v3を有効化し、APIキーを発行します。
@@ -22,6 +23,10 @@ APIキーは端末内に保存されますが、APKから取り出される可�
 
 ## APK
 GitHub Actionsの **Build Android APK** を実行すると、Release APKがArtifactとして生成されます。
+
+## Offline video
+
+The offline library stores authorized direct video-file URLs in the app's private documents directory. It does not download YouTube videos, extract player streams, bypass ads, Premium restrictions, DRM, or provider controls. Offline playback is limited to video files whose owner permits downloading.
 
 ## Compliance
 YouTube公式IFrame Player APIとYouTube Data API v3を使用します。広告除去、認証・有料機能の回避、DRM回避、学校ネットワーク制限の回避は実装しません。YouTube API Services Terms of ServiceおよびYouTube利用規約に従います。
