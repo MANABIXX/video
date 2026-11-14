@@ -41,7 +41,6 @@ class VideoApp extends StatelessWidget {
         ),
       ),
     ),
-    builder: (context, child) => MaterialUiCompatibilityBridge(child: child!),
     home: const Shell(),
   );
 }
