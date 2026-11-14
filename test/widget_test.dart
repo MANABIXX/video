@@ -25,4 +25,22 @@ void main() {
 
     expect(find.text('保存した動画はまだありません'), findsOneWidget);
   });
+
+  test('video metadata survives local serialization', () {
+    const original = Video(
+      'video-id',
+      '数学の解説',
+      'MANABIXX',
+      '学習用の説明',
+      'https://example.com/thumb.jpg',
+    );
+
+    final restored = Video.fromJson(original.toJson());
+
+    expect(restored.id, original.id);
+    expect(restored.title, original.title);
+    expect(restored.channel, original.channel);
+    expect(restored.description, original.description);
+    expect(restored.thumbnail, original.thumbnail);
+  });
 }
