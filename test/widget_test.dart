@@ -7,8 +7,10 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'),
-            (call) async => '/tmp');
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (call) async => '/tmp',
+        );
   });
 
   testWidgets('renders the MANABIXX Video learning home', (tester) async {
@@ -32,7 +34,12 @@ void main() {
   });
 
   test('offline video metadata survives local serialization', () {
-    const original = OfflineVideo(id: 'lesson.mp4', title: '理科の授業', path: '/tmp/lesson.mp4', bytes: 1024);
+    const original = OfflineVideo(
+      id: 'lesson.mp4',
+      title: '理科の授業',
+      path: '/tmp/lesson.mp4',
+      bytes: 1024,
+    );
     final restored = OfflineVideo.fromJson(original.toJson());
     expect(restored.id, original.id);
     expect(restored.title, original.title);
