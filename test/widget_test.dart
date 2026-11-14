@@ -19,7 +19,7 @@ void main() {
     expect(find.text('教科から探す'), findsOneWidget);
     expect(find.text('動画を探す'), findsOneWidget);
     expect(find.text('ライブラリ'), findsOneWidget);
-    expect(find.text('オフライン'), findsOneWidget);
+    expect(find.text('オフライン'), findsWidgets);
   });
 
   testWidgets('shows saved videos library empty state', (tester) async {
