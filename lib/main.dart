@@ -89,7 +89,8 @@ class _ShellState extends State<Shell> {
     final p=await SharedPreferences.getInstance();
     await p.setStringList('history',next.map((x)=>jsonEncode(x.toJson())).toList());
     if(mounted)setState(()=>history=next);
-  }\n  void _play(Video v){unawaited(_recordHistory(v));Navigator.push(context,MaterialPageRoute(builder:(_)=>PlayerPage(video:v,isSaved:saved.any((x)=>x.id==v.id),onSave:()=>_toggle(v))));}
+  }
+  void _play(Video v){unawaited(_recordHistory(v));Navigator.push(context,MaterialPageRoute(builder:(_)=>PlayerPage(video:v,isSaved:saved.any((x)=>x.id==v.id),onSave:()=>_toggle(v))));}
   @override Widget build(BuildContext context){
     if(!ready)return const Scaffold(body:Center(child:CircularProgressIndicator()));
     return Scaffold(
