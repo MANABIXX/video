@@ -1,10 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:manabixx_video/main.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'),
+            (call) async => '/tmp');
   });
 
   testWidgets('renders the MANABIXX Video learning home', (tester) async {
@@ -15,6 +19,7 @@ void main() {
     expect(find.text('教科から探す'), findsOneWidget);
     expect(find.text('動画を探す'), findsOneWidget);
     expect(find.text('ライブラリ'), findsOneWidget);
+    expect(find.text('オフライン'), findsOneWidget);
   });
 
   testWidgets('shows saved videos library empty state', (tester) async {
@@ -24,6 +29,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('保存した動画はまだありません'), findsOneWidget);
+  });
+
+  test('offline video metadata survives local serialization', () {
+    const original = OfflineVideo(id: 'lesson.mp4', title: '理科の授業', path: '/tmp/lesson.mp4', bytes: 1024);
+    final restored = OfflineVideo.fromJson(original.toJson());
+    expect(restored.id, original.id);
+    expect(restored.title, original.title);
+    expect(restored.path, original.path);
+    expect(restored.bytes, original.bytes);
   });
 
   test('video metadata survives local serialization', () {
