@@ -323,7 +323,7 @@ class _OfflineTabState extends State<OfflineTab> {
     const SizedBox(height: 12),
     Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(18)), child: Row(children: [
       const Icon(Icons.wifi_off_rounded, color: accent, size: 26), const SizedBox(width: 12),
-      const Expanded(child: Text('端末内に保存した動画を、圏外や移動中でも再生。保存データはこのアプリ内に保管されます。', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45))),
+      Expanded(child: Text('端末内に保存した動画を、圏外や移動中でも再生。保存データはこのアプリ内に保管されます。', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45))),
     ])),
     const SizedBox(height: 14),
     Row(children: [
