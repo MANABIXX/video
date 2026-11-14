@@ -7,6 +7,9 @@ Flutter製の学習向けYouTubeクライアント。軽快なダークUIで、�
 - YouTube公式IFrame Player APIによるアプリ内再生
 - 日本語字幕・全画面再生
 - ブックマークの端末内保存
+- 動画ごとの学習メモ保存
+- 再生位置の自動保存・続きから再生
+- YouTube側が提供する範囲での再生速度変更
 - Android Release APKのGitHub Actionsビルド
 
 ## Setup
