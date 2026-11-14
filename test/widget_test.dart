@@ -1,38 +1,67 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:manabixx_video/main.dart';
 
 void main() {
-  testWidgets('shows the MANABIXX Video home screen', (tester) async {
-    await tester.pumpWidget(const ManabixxVideoApp());
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (call) async => '/tmp',
+        );
+  });
 
-    expect(find.text('MANABIXX Video'), findsOneWidget);
+  testWidgets('renders the MANABIXX Video learning home', (tester) async {
+    await tester.pumpWidget(const VideoApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('MANABIXX'), findsOneWidget);
     expect(find.text('教科から探す'), findsOneWidget);
-    expect(find.text('数学'), findsOneWidget);
-    expect(find.text('マイライブラリ'), findsOneWidget);
+    expect(find.text('動画を探す'), findsOneWidget);
+    expect(find.text('ライブラリ'), findsOneWidget);
+    expect(find.text('オフライン'), findsWidgets);
   });
 
-  testWidgets('allows selecting and clearing a subject', (tester) async {
-    await tester.pumpWidget(const ManabixxVideoApp());
-
-    await tester.tap(find.text('数学'));
+  testWidgets('shows saved videos library empty state', (tester) async {
+    await tester.pumpWidget(const VideoApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ライブラリ'));
     await tester.pumpAndSettle();
 
-    expect(find.text('教材連携準備中'), findsOneWidget);
-    expect(find.text('解除'), findsOneWidget);
-
-    await tester.tap(find.text('解除'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('教材連携準備中'), findsNothing);
+    expect(find.text('保存した動画はまだありません'), findsOneWidget);
   });
 
-  testWidgets('shows the entered search query', (tester) async {
-    await tester.pumpWidget(const ManabixxVideoApp());
+  test('offline video metadata survives local serialization', () {
+    const original = OfflineVideo(
+      id: 'lesson.mp4',
+      title: '理科の授業',
+      path: '/tmp/lesson.mp4',
+      bytes: 1024,
+    );
+    final restored = OfflineVideo.fromJson(original.toJson());
+    expect(restored.id, original.id);
+    expect(restored.title, original.title);
+    expect(restored.path, original.path);
+    expect(restored.bytes, original.bytes);
+  });
 
-    await tester.enterText(find.byType(TextField), '一次関数');
-    await tester.pumpAndSettle();
+  test('video metadata survives local serialization', () {
+    const original = Video(
+      'video-id',
+      '数学の解説',
+      'MANABIXX',
+      '学習用の説明',
+      'https://example.com/thumb.jpg',
+    );
 
-    expect(find.text('「一次関数」'), findsOneWidget);
-    expect(find.text('教材連携準備中'), findsOneWidget);
+    final restored = Video.fromJson(original.toJson());
+
+    expect(restored.id, original.id);
+    expect(restored.title, original.title);
+    expect(restored.channel, original.channel);
+    expect(restored.description, original.description);
+    expect(restored.thumbnail, original.thumbnail);
   });
 }
