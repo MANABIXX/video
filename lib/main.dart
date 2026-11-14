@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
@@ -80,7 +84,12 @@ class _ShellState extends State<Shell> {
     await p.setStringList('saved',next.map((x)=>jsonEncode(x.toJson())).toList());
     if(mounted)setState(()=>saved=next);
   }
-  Future<void> _recordHistory(Video v) async {\n    final next=[v,...history.where((x)=>x.id!=v.id)].take(20).toList();\n    final p=await SharedPreferences.getInstance();\n    await p.setStringList('history',next.map((x)=>jsonEncode(x.toJson())).toList());\n    if(mounted)setState(()=>history=next);\n  }\n  void _play(Video v){unawaited(_recordHistory(v));Navigator.push(context,MaterialPageRoute(builder:(_)=>PlayerPage(video:v,isSaved:saved.any((x)=>x.id==v.id),onSave:()=>_toggle(v))));}
+  Future<void> _recordHistory(Video v) async {
+    final next=[v,...history.where((x)=>x.id!=v.id)].take(20).toList();
+    final p=await SharedPreferences.getInstance();
+    await p.setStringList('history',next.map((x)=>jsonEncode(x.toJson())).toList());
+    if(mounted)setState(()=>history=next);
+  }\n  void _play(Video v){unawaited(_recordHistory(v));Navigator.push(context,MaterialPageRoute(builder:(_)=>PlayerPage(video:v,isSaved:saved.any((x)=>x.id==v.id),onSave:()=>_toggle(v))));}
   @override Widget build(BuildContext context){
     if(!ready)return const Scaffold(body:Center(child:CircularProgressIndicator()));
     return Scaffold(
@@ -90,12 +99,14 @@ class _ShellState extends State<Shell> {
         HomeTab(onSearch:()=>setState(()=>tab=1),saved:saved,history:history,onPlay:_play),
         SearchTab(apiKey:apiKey,saved:saved,onPlay:_play,onSave:_toggle,onSettings:_keyDialog),
         LibraryTab(saved:saved,onPlay:_play,onRemove:_toggle),
+        const OfflineTab(),
       ]),
       bottomNavigationBar:NavigationBar(backgroundColor:panel,selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),
         destinations:const[
           NavigationDestination(icon:Icon(Icons.home_outlined),selectedIcon:Icon(Icons.home),label:'ホーム'),
           NavigationDestination(icon:Icon(Icons.search),label:'検索'),
           NavigationDestination(icon:Icon(Icons.bookmarks_outlined),selectedIcon:Icon(Icons.bookmarks),label:'ライブラリ'),
+          NavigationDestination(icon:Icon(Icons.download_for_offline_outlined),selectedIcon:Icon(Icons.download_for_offline),label:'オフライン'),
         ]),
     );
   }
@@ -119,7 +130,8 @@ class HomeTab extends StatelessWidget {
       title:Text(s.$1,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:const Text('学習動画を検索',style:TextStyle(color:muted,fontSize:11)),
       trailing:const Icon(Icons.chevron_right,color:muted),onTap:onSearch,
     )))),
-    if(history.isNotEmpty)...[const SizedBox(height:20),const _Heading('最近見た動画','前回の学習をすぐ再開'),...history.take(5).map((v)=>VideoTile(video:v,onTap:()=>onPlay(v)))],\n    if(saved.isNotEmpty)...[const SizedBox(height:20),const _Heading('保存した動画'),...saved.take(3).map((v)=>VideoTile(video:v,onTap:()=>onPlay(v)))],
+    if(history.isNotEmpty)...[const SizedBox(height:20),const _Heading('最近見た動画','前回の学習をすぐ再開'),...history.take(5).map((v)=>VideoTile(video:v,onTap:()=>onPlay(v)))],
+    if(saved.isNotEmpty)...[const SizedBox(height:20),const _Heading('保存した動画'),...saved.take(3).map((v)=>VideoTile(video:v,onTap:()=>onPlay(v)))],
   ]);
 }
 
@@ -164,6 +176,205 @@ class LibraryTab extends StatelessWidget{
     if(saved.isEmpty)const _Info(icon:Icons.bookmarks_outlined,title:'保存した動画はまだありません',message:'検索結果のブックマークから動画を保存できます。')
     else ...saved.map((v)=>VideoTile(video:v,onTap:()=>onPlay(v),trailing:IconButton(onPressed:()=>onRemove(v),icon:const Icon(Icons.bookmark_remove_outlined,color:muted)))),
   ]);
+}
+
+
+class OfflineVideo {
+  const OfflineVideo({required this.id, required this.title, required this.path, required this.bytes});
+  final String id, title, path;
+  final int bytes;
+  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'path': path, 'bytes': bytes};
+  factory OfflineVideo.fromJson(Map<String, dynamic> json) => OfflineVideo(
+    id: json['id'] as String,
+    title: json['title'] as String,
+    path: json['path'] as String,
+    bytes: json['bytes'] as int? ?? 0,
+  );
+}
+
+class OfflineTab extends StatefulWidget {
+  const OfflineTab({super.key});
+  @override State<OfflineTab> createState() => _OfflineTabState();
+}
+
+class _OfflineTabState extends State<OfflineTab> {
+  static const _storageKey = 'offline_videos_v1';
+  final _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(minutes: 30)));
+  List<OfflineVideo> _items = [];
+  bool _loading = true, _downloading = false;
+  double _progress = 0;
+  String? _downloadError;
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final values = prefs.getStringList(_storageKey) ?? [];
+    final docs = await getApplicationDocumentsDirectory();
+    final found = <OfflineVideo>[];
+    for (final raw in values) {
+      try {
+        final item = OfflineVideo.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        if (await File(item.path).exists()) found.add(item);
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() { _items = found; _loading = false; });
+    await _persist();
+  }
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_storageKey, _items.map((v) => jsonEncode(v.toJson())).toList());
+  }
+
+  Future<void> _addDownload() async {
+    final titleController = TextEditingController();
+    final urlController = TextEditingController();
+    final input = await showDialog<(String, String)>(context: context, builder: (dialogContext) => AlertDialog(
+      backgroundColor: panel,
+      title: const Text('動画を端末に保存'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: titleController, decoration: const InputDecoration(labelText: '動画タイトル')),
+        const SizedBox(height: 12),
+        TextField(controller: urlController, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: '動画ファイルのURL', hintText: 'https://example.com/lesson.mp4')),
+        const SizedBox(height: 10),
+        const Text('自分が所有する動画、または配布元がダウンロードを許可しているMP4等の直リンクに対応。YouTubeの動画URLや配信ストリームは対象外です。', style: TextStyle(color: muted, fontSize: 11, height: 1.45)),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('キャンセル')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, (titleController.text.trim(), urlController.text.trim())), child: const Text('ダウンロード')),
+      ],
+    ));
+    titleController.dispose(); urlController.dispose();
+    if (input == null || !mounted) return;
+    await _download(input.$1, input.$2);
+  }
+
+  Future<void> _download(String title, String rawUrl) async {
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || !['http', 'https'].contains(uri.scheme) || uri.host.isEmpty) {
+      setState(() => _downloadError = '有効なHTTPS/HTTP動画ファイルURLを入力してください。');
+      return;
+    }
+    final host = uri.host.toLowerCase();
+    if (host == 'youtube.com' || host.endsWith('.youtube.com') || host == 'youtu.be' || host.endsWith('.googlevideo.com')) {
+      setState(() => _downloadError = 'YouTubeの動画はこの機能でダウンロードできません。公式プレイヤーで視聴してください。');
+      return;
+    }
+    final ext = uri.path.toLowerCase().split('.').last;
+    if (!['mp4', 'm4v', 'mov', 'webm'].contains(ext)) {
+      setState(() => _downloadError = '対応形式はMP4・M4V・MOV・WebMです。');
+      return;
+    }
+    setState(() { _downloading = true; _progress = 0; _downloadError = null; });
+    String? target;
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final safeName = 'manabixx_${DateTime.now().microsecondsSinceEpoch}.$ext';
+      target = '${directory.path}/$safeName';
+      final response = await _dio.download(rawUrl, target, deleteOnError: true,
+        onReceiveProgress: (received, total) {
+          if (mounted && total > 0) setState(() => _progress = received / total);
+        });
+      final contentType = response.headers.value(Headers.contentTypeHeader)?.toLowerCase() ?? '';
+      final file = File(target);
+      if (response.statusCode != 200 && response.statusCode != 206) throw Exception('HTTP ${response.statusCode}');
+      if (!(contentType.startsWith('video/') || contentType == 'application/octet-stream')) {
+        throw Exception('動画ファイルとして確認できませんでした（$contentType）');
+      }
+      final length = await file.length();
+      if (length == 0) throw Exception('ファイルが空です');
+      final item = OfflineVideo(id: safeName, title: title.isEmpty ? '保存した動画' : title, path: target, bytes: length);
+      if (!mounted) return;
+      setState(() => _items = [item, ..._items]);
+      await _persist();
+    } catch (error) {
+      if (target != null) { final file = File(target); if (await file.exists()) await file.delete(); }
+      if (mounted) setState(() => _downloadError = '保存できませんでした: $error');
+    } finally {
+      if (mounted) setState(() { _downloading = false; _progress = 0; });
+    }
+  }
+
+  Future<void> _delete(OfflineVideo item) async {
+    final file = File(item.path);
+    if (await file.exists()) await file.delete();
+    if (!mounted) return;
+    setState(() => _items = _items.where((v) => v.id != item.id).toList());
+    await _persist();
+  }
+
+  String _size(int bytes) => bytes >= 1024 * 1024
+      ? '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB'
+      : '${(bytes / 1024).toStringAsFixed(0)} KB';
+
+  @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.fromLTRB(18, 18, 18, 28), children: [
+    const _Heading('オフライン','保存した教材動画は通信なしで再生できます'),
+    const SizedBox(height: 12),
+    Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(18)), child: Row(children: [
+      const Icon(Icons.wifi_off_rounded, color: accent, size: 26), const SizedBox(width: 12),
+      const Expanded(child: Text('端末内に保存した動画を、圏外や移動中でも再生。保存データはこのアプリ内に保管されます。', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45))),
+    ])),
+    const SizedBox(height: 14),
+    FilledButton.icon(onPressed: _downloading ? null : _addDownload, icon: const Icon(Icons.download_rounded), label: const Text('動画ファイルを追加')),
+    if (_downloading) ...[
+      const SizedBox(height: 14), LinearProgressIndicator(value: _progress == 0 ? null : _progress),
+      const SizedBox(height: 6), Text(_progress == 0 ? 'ダウンロード準備中…' : '${(_progress * 100).toStringAsFixed(0)}% 保存中', style: const TextStyle(color: muted, fontSize: 12)),
+    ],
+    if (_downloadError != null) ...[const SizedBox(height: 12), _Info(icon: Icons.error_outline, title: 'ダウンロードできません', message: _downloadError!)],
+    const SizedBox(height: 24),
+    _Heading('保存済み','${_items.length}本'),
+    const SizedBox(height: 10),
+    if (_loading) const Center(child: CircularProgressIndicator())
+    else if (_items.isEmpty) const _Info(icon: Icons.download_for_offline_outlined, title: 'まだ動画がありません', message: '「動画ファイルを追加」から、ダウンロードが許可された教材動画を保存できます。')
+    else ..._items.map((item) => Card(color: panel, child: ListTile(
+      leading: const Icon(Icons.movie_outlined, color: accent),
+      title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+      subtitle: Text(_size(item.bytes), style: const TextStyle(color: muted)),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OfflinePlayerPage(item: item))),
+      trailing: IconButton(tooltip: '削除', onPressed: () => _delete(item), icon: const Icon(Icons.delete_outline, color: muted)),
+    ))),
+  ]);
+}
+
+class OfflinePlayerPage extends StatefulWidget {
+  const OfflinePlayerPage({super.key, required this.item});
+  final OfflineVideo item;
+  @override State<OfflinePlayerPage> createState() => _OfflinePlayerPageState();
+}
+
+class _OfflinePlayerPageState extends State<OfflinePlayerPage> {
+  late final VideoPlayerController _controller;
+  bool _ready = false;
+  @override void initState() {
+    super.initState();
+    _controller = VideoPlayerController.file(File(widget.item.path))
+      ..initialize().then((_) { if (mounted) setState(() => _ready = true); })
+      ..addListener(() { if (mounted) setState(() {}); });
+  }
+  @override void dispose() { _controller.dispose(); super.dispose(); }
+  String _time(Duration value) => '${value.inMinutes.toString().padLeft(2, '0')}:${(value.inSeconds % 60).toString().padLeft(2, '0')}';
+  @override Widget build(BuildContext context) {
+    final value = _controller.value;
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.item.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      body: _ready ? ListView(padding: const EdgeInsets.all(16), children: [
+        AspectRatio(aspectRatio: value.aspectRatio, child: VideoPlayer(_controller)),
+        const SizedBox(height: 12),
+        Row(children: [
+          IconButton.filled(onPressed: () => setState(() => value.isPlaying ? _controller.pause() : _controller.play()),
+            icon: Icon(value.isPlaying ? Icons.pause : Icons.play_arrow), style: IconButton.styleFrom(backgroundColor: accent, foregroundColor: bg)),
+          Expanded(child: Slider(value: value.duration.inMilliseconds == 0 ? 0 : value.position.inMilliseconds.clamp(0, value.duration.inMilliseconds).toDouble(),
+            max: value.duration.inMilliseconds == 0 ? 1 : value.duration.inMilliseconds.toDouble(),
+            onChanged: (v) => _controller.seekTo(Duration(milliseconds: v.round())))),
+        ]),
+        Text('${_time(value.position)} / ${_time(value.duration)}', textAlign: TextAlign.end, style: const TextStyle(color: muted, fontSize: 12)),
+        const SizedBox(height: 8),
+        const Text('端末内の保存ファイルを再生中 · インターネット接続不要', style: TextStyle(color: muted, fontSize: 12)),
+      ]) : const Center(child: CircularProgressIndicator()),
+    );
+  }
 }
 
 class PlayerPage extends StatefulWidget{
