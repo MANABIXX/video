@@ -177,16 +177,17 @@ class _PlayerPageState extends State<PlayerPage>{
   Timer? progressTimer;
   double speed=1;
   double resumeAt=0;
-  bool noteSaved=false;
+  bool isSaved=false;
 
   String get _progressKey=>'progress_${widget.video.id}';
   String get _noteKey=>'note_${widget.video.id}';
 
   @override void initState(){
     super.initState();
+    isSaved=widget.isSaved;
     controller=YoutubePlayerController.fromVideoId(videoId:widget.video.id,autoPlay:true,params:const YoutubePlayerParams(showControls:true,showFullscreenButton:true,interfaceLanguage:'ja',captionLanguage:'ja',enableCaption:true,playsInline:true,strictRelatedVideos:true));
     _restoreLearningData();
-    progressTimer=Timer.periodic(const Duration(seconds:8),(_)=>_saveProgress());
+    progressTimer=Timer.periodic(const Duration(seconds:8),(_){unawaited(_saveProgress());});
   }
 
   Future<void> _restoreLearningData() async {
@@ -222,7 +223,7 @@ class _PlayerPageState extends State<PlayerPage>{
   Future<void> _saveNote() async {
     final p=await SharedPreferences.getInstance();
     await p.setString(_noteKey,noteController.text.trim());
-    if(mounted){setState(()=>noteSaved=true);ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('メモを保存しました')));}
+    if(mounted){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('メモを保存しました')));}
   }
 
   Future<void> _changeSpeed(double value) async {
@@ -232,9 +233,9 @@ class _PlayerPageState extends State<PlayerPage>{
 
   @override void dispose(){
     progressTimer?.cancel();
-    _saveProgress();
+    unawaited(_saveProgress());
     noteController.dispose();
-    controller.close();
+    unawaited(controller.close());
     super.dispose();
   }
 
@@ -245,7 +246,7 @@ class _PlayerPageState extends State<PlayerPage>{
       const SizedBox(height:8),Text(widget.video.channel,style:const TextStyle(color:muted)),
       const SizedBox(height:14),
       Wrap(spacing:10,runSpacing:8,crossAxisAlignment:WrapCrossAlignment.center,children:[
-        OutlinedButton.icon(onPressed:widget.onSave,icon:Icon(widget.isSaved?Icons.bookmark:Icons.bookmark_add_outlined),label:Text(widget.isSaved?'保存済み':'保存する')),
+        OutlinedButton.icon(onPressed:(){setState(()=>isSaved=!isSaved);widget.onSave();},icon:Icon(isSaved?Icons.bookmark:Icons.bookmark_add_outlined),label:Text(isSaved?'保存済み':'保存する')),
         const Text('再生速度',style:TextStyle(color:muted,fontSize:12)),
         DropdownButton<double>(value:speed,items:const [0.5,0.75,1,1.25,1.5,2].map((v)=>DropdownMenuItem(value:v,child:Text('${v}x'))).toList(),onChanged:(v){if(v!=null)_changeSpeed(v);}),
       ]),
