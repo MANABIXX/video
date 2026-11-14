@@ -1,13 +1,25 @@
 # MANABIXX Video
 
-Educational video learning client built with Flutter.
+An education-focused video learning client built with Flutter.
 
-This project uses official APIs and playback methods and does not disguise or bypass school device, network, or content restrictions. Use only with appropriate permission and in accordance with platform terms.
+## Goals
+
+- Organize learning videos by subject and unit.
+- Provide study notes, captions, bookmarks, and learning progress.
+- Use official, permitted video playback integrations.
+- Keep this app independent from the main MANABIXX repository.
+
+> This project does not disguise traffic or bypass school device/network controls. Playback availability depends on school policies and the video provider's official embedding and API terms.
 
 ## Getting started
 
-1. Install Flutter.
-2. Run `flutter pub get`.
-3. Run `flutter run -d chrome` for web.
+Requires the Flutter SDK.
 
-See the Flutter documentation for platform setup.
+```bash
+flutter pub get
+flutter run -d chrome
+```
+
+## Project status
+
+Early scaffold (0.1.0). Video search and playback integrations are not configured yet.
