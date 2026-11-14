@@ -114,8 +114,8 @@ class _ShellState extends State<Shell> {
 }
 
 class HomeTab extends StatelessWidget {
-  const HomeTab({super.key,required this.onSearch,required this.saved,required this.onPlay});
-  final VoidCallback onSearch; final List<Video> saved; final ValueChanged<Video> onPlay;
+  const HomeTab({super.key,required this.onSearch,required this.saved,required this.history,required this.onPlay});
+  final VoidCallback onSearch; final List<Video> saved, history; final ValueChanged<Video> onPlay;
   static const subjects=[('数学',Icons.calculate_rounded),('英語',Icons.translate_rounded),('理科',Icons.science_rounded),('社会',Icons.public_rounded),('国語',Icons.menu_book_rounded)];
   @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.fromLTRB(18,8,18,28),children:[
     Container(padding:const EdgeInsets.all(22),decoration:BoxDecoration(borderRadius:BorderRadius.circular(24),gradient:const LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,colors:[Color(0xFF203653),Color(0xFF151B27),Color(0xFF10141C)]),border:Border.all(color:Colors.white10)),
@@ -211,7 +211,6 @@ class _OfflineTabState extends State<OfflineTab> {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     final values = prefs.getStringList(_storageKey) ?? [];
-    final docs = await getApplicationDocumentsDirectory();
     final found = <OfflineVideo>[];
     for (final raw in values) {
       try {
@@ -460,7 +459,7 @@ class _PlayerPageState extends State<PlayerPage>{
       Wrap(spacing:10,runSpacing:8,crossAxisAlignment:WrapCrossAlignment.center,children:[
         OutlinedButton.icon(onPressed:(){setState(()=>isSaved=!isSaved);widget.onSave();},icon:Icon(isSaved?Icons.bookmark:Icons.bookmark_add_outlined),label:Text(isSaved?'保存済み':'保存する')),
         const Text('再生速度',style:TextStyle(color:muted,fontSize:12)),
-        DropdownButton<double>(value:speed,items:const [0.5,0.75,1,1.25,1.5,2].map((v)=>DropdownMenuItem(value:v,child:Text('${v}x'))).toList(),onChanged:(v){if(v!=null)_changeSpeed(v);}),
+        DropdownButton<double>(value:speed,items:const <double>[0.5,0.75,1.0,1.25,1.5,2.0].map((v)=>DropdownMenuItem<double>(value:v,child:Text('${v}x'))).toList(),onChanged:(v){if(v!=null)_changeSpeed(v);}),
       ]),
       if(resumeAt>5)Padding(padding:const EdgeInsets.only(top:8),child:Text('続きから再生中 · ${(resumeAt/60).floor()}分${(resumeAt%60).floor()}秒',style:const TextStyle(color:accent,fontSize:12))),
       const Divider(height:32,color:Colors.white12),
