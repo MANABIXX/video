@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -172,14 +173,88 @@ class PlayerPage extends StatefulWidget{
 }
 class _PlayerPageState extends State<PlayerPage>{
   late final YoutubePlayerController controller;
-  @override void initState(){super.initState();controller=YoutubePlayerController.fromVideoId(videoId:widget.video.id,autoPlay:true,params:const YoutubePlayerParams(showControls:true,showFullscreenButton:true,interfaceLanguage:'ja',captionLanguage:'ja',enableCaption:true,playsInline:true,strictRelatedVideos:true));}
-  @override void dispose(){controller.close();super.dispose();}
+  final noteController=TextEditingController();
+  Timer? progressTimer;
+  double speed=1;
+  double resumeAt=0;
+  bool noteSaved=false;
+
+  String get _progressKey=>'progress_${widget.video.id}';
+  String get _noteKey=>'note_${widget.video.id}';
+
+  @override void initState(){
+    super.initState();
+    controller=YoutubePlayerController.fromVideoId(videoId:widget.video.id,autoPlay:true,params:const YoutubePlayerParams(showControls:true,showFullscreenButton:true,interfaceLanguage:'ja',captionLanguage:'ja',enableCaption:true,playsInline:true,strictRelatedVideos:true));
+    _restoreLearningData();
+    progressTimer=Timer.periodic(const Duration(seconds:8),(_)=>_saveProgress());
+  }
+
+  Future<void> _restoreLearningData() async {
+    final p=await SharedPreferences.getInstance();
+    final position=p.getDouble(_progressKey)??0;
+    final note=p.getString(_noteKey)??'';
+    if(!mounted)return;
+    setState(()=>noteController.text=note);
+    if(position>5){
+      await Future.delayed(const Duration(seconds:2));
+      if(!mounted)return;
+      resumeAt=position;
+      await controller.seekTo(seconds:position);
+      if(mounted)setState((){});
+    }
+  }
+
+  Future<void> _saveProgress() async {
+    try{
+      final current=await controller.currentTime;
+      final duration=await controller.duration;
+      if(current>0 && duration>0 && current<duration-3){
+        final p=await SharedPreferences.getInstance();
+        await p.setDouble(_progressKey,current);
+        if(mounted && (current-resumeAt).abs()>8)setState(()=>resumeAt=current);
+      }else if(duration>0 && current>=duration-3){
+        final p=await SharedPreferences.getInstance();
+        await p.remove(_progressKey);
+      }
+    }catch(_){}
+  }
+
+  Future<void> _saveNote() async {
+    final p=await SharedPreferences.getInstance();
+    await p.setString(_noteKey,noteController.text.trim());
+    if(mounted){setState(()=>noteSaved=true);ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('メモを保存しました')));}
+  }
+
+  Future<void> _changeSpeed(double value) async {
+    await controller.setPlaybackRate(value);
+    if(mounted)setState(()=>speed=value);
+  }
+
+  @override void dispose(){
+    progressTimer?.cancel();
+    _saveProgress();
+    noteController.dispose();
+    controller.close();
+    super.dispose();
+  }
+
   @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('再生中')),body:ListView(children:[
     YoutubePlayer(controller:controller,aspectRatio:16/9),
     Padding(padding:const EdgeInsets.all(18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       Text(widget.video.title,style:const TextStyle(fontSize:19,fontWeight:FontWeight.w800,height:1.35)),
       const SizedBox(height:8),Text(widget.video.channel,style:const TextStyle(color:muted)),
-      const SizedBox(height:14),OutlinedButton.icon(onPressed:widget.onSave,icon:Icon(widget.isSaved?Icons.bookmark:Icons.bookmark_add_outlined),label:Text(widget.isSaved?'保存済み':'保存する')),
+      const SizedBox(height:14),
+      Wrap(spacing:10,runSpacing:8,crossAxisAlignment:WrapCrossAlignment.center,children:[
+        OutlinedButton.icon(onPressed:widget.onSave,icon:Icon(widget.isSaved?Icons.bookmark:Icons.bookmark_add_outlined),label:Text(widget.isSaved?'保存済み':'保存する')),
+        const Text('再生速度',style:TextStyle(color:muted,fontSize:12)),
+        DropdownButton<double>(value:speed,items:const [0.5,0.75,1,1.25,1.5,2].map((v)=>DropdownMenuItem(value:v,child:Text('${v}x'))).toList(),onChanged:(v){if(v!=null)_changeSpeed(v);}),
+      ]),
+      if(resumeAt>5)Padding(padding:const EdgeInsets.only(top:8),child:Text('続きから再生中 · ${(resumeAt/60).floor()}分${(resumeAt%60).floor()}秒',style:const TextStyle(color:accent,fontSize:12))),
+      const Divider(height:32,color:Colors.white12),
+      const Text('学習メモ',style:TextStyle(fontWeight:FontWeight.w800)),
+      const SizedBox(height:8),
+      TextField(controller:noteController,minLines:3,maxLines:6,decoration:const InputDecoration(hintText:'重要なポイントや疑問点をメモ...',alignLabelWithHint:true)),
+      const SizedBox(height:8),Align(alignment:Alignment.centerRight,child:FilledButton.icon(onPressed:_saveNote,icon:const Icon(Icons.save_outlined),label:const Text('メモを保存'))),
       const Divider(height:32,color:Colors.white12),const Text('概要',style:TextStyle(fontWeight:FontWeight.w800)),const SizedBox(height:8),
       Text(widget.video.description.isEmpty?'説明はありません。':widget.video.description,style:const TextStyle(color:Colors.white70,height:1.55)),
       const SizedBox(height:18),const Text('YouTube公式IFrame Player APIを使用しています。広告除去や有料機能の回避は行いません。',style:TextStyle(color:muted,fontSize:11,height:1.5)),
