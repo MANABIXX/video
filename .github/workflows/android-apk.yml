@@ -29,7 +29,7 @@ jobs:
           channel: stable
           cache: true
       - name: Generate Android platform
-        run: flutter create --platforms=android --org jp.manabixx .
+        run: flutter create --platforms=android,ios --org jp.manabixx .
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
@@ -40,3 +40,19 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
+
+  ios-simulator:
+    name: iOS offline-player compatibility
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate iOS platform
+        run: flutter create --platforms=ios --org jp.manabixx .
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build ios --simulator --no-codesign
