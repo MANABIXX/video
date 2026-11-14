@@ -1,7 +1,11 @@
 # Changelog
 
+## 0.4.0
+- Add an iOS/Android offline video library for authorized direct MP4/M4V/MOV downloads, progress display, local playback, and deletion.
+- Keep YouTube videos on the official online IFrame Player; no YouTube stream downloading.
+
 ## Unreleased
-- Add an in-app offline library for authorized direct MP4/M4V/MOV/WebM downloads, progress display, local playback, and deletion.
+- Add an in-app offline library for authorized direct MP4/M4V/MOV downloads, progress display, local playback, and deletion.
 - Keep YouTube videos on the official online IFrame Player; no YouTube stream downloading.
 - Add local learning notes for each video.
 - Keep a persistent list of recently watched videos.
