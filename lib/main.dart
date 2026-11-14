@@ -52,12 +52,12 @@ class Shell extends StatefulWidget {
   @override State<Shell> createState()=>_ShellState();
 }
 class _ShellState extends State<Shell> {
-  int tab=0; String apiKey=''; bool ready=false; List<Video> saved=[];
+  int tab=0; String apiKey=''; bool ready=false; List<Video> saved=[]; List<Video> history=[];
   @override void initState(){super.initState();_load();}
   Future<void> _load() async {
     final p=await SharedPreferences.getInstance();
     if(!mounted)return;
-    setState((){apiKey=p.getString('youtube_api_key')??'';saved=(p.getStringList('saved')??[]).map((s)=>Video.fromJson(jsonDecode(s))).toList();ready=true;});
+    setState((){apiKey=p.getString('youtube_api_key')??'';saved=(p.getStringList('saved')??[]).map((s)=>Video.fromJson(jsonDecode(s))).toList();history=(p.getStringList('history')??[]).map((s)=>Video.fromJson(jsonDecode(s))).toList();ready=true;});
   }
   Future<void> _keyDialog() async {
     final c=TextEditingController(text:apiKey);
@@ -80,14 +80,14 @@ class _ShellState extends State<Shell> {
     await p.setStringList('saved',next.map((x)=>jsonEncode(x.toJson())).toList());
     if(mounted)setState(()=>saved=next);
   }
-  void _play(Video v)=>Navigator.push(context,MaterialPageRoute(builder:(_)=>PlayerPage(video:v,isSaved:saved.any((x)=>x.id==v.id),onSave:()=>_toggle(v))));
+  Future<void> _recordHistory(Video v) async {\n    final next=[v,...history.where((x)=>x.id!=v.id)].take(20).toList();\n    final p=await SharedPreferences.getInstance();\n    await p.setStringList('history',next.map((x)=>jsonEncode(x.toJson())).toList());\n    if(mounted)setState(()=>history=next);\n  }\n  void _play(Video v){unawaited(_recordHistory(v));Navigator.push(context,MaterialPageRoute(builder:(_)=>PlayerPage(video:v,isSaved:saved.any((x)=>x.id==v.id),onSave:()=>_toggle(v))));}
   @override Widget build(BuildContext context){
     if(!ready)return const Scaffold(body:Center(child:CircularProgressIndicator()));
     return Scaffold(
       appBar:AppBar(title:const Row(children:[Icon(Icons.play_circle_fill_rounded,color:accent),SizedBox(width:8),Text('MANABIXX',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:-.5)),SizedBox(width:6),Text('VIDEO',style:TextStyle(color:accent,fontSize:12,fontWeight:FontWeight.w900,letterSpacing:1.2))]),
         actions:[IconButton(onPressed:_keyDialog,icon:const Icon(Icons.tune_rounded),tooltip:'設定')]),
       body:IndexedStack(index:tab,children:[
-        HomeTab(onSearch:()=>setState(()=>tab=1),saved:saved,onPlay:_play),
+        HomeTab(onSearch:()=>setState(()=>tab=1),saved:saved,history:history,onPlay:_play),
         SearchTab(apiKey:apiKey,saved:saved,onPlay:_play,onSave:_toggle,onSettings:_keyDialog),
         LibraryTab(saved:saved,onPlay:_play,onRemove:_toggle),
       ]),
@@ -119,7 +119,7 @@ class HomeTab extends StatelessWidget {
       title:Text(s.$1,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:const Text('学習動画を検索',style:TextStyle(color:muted,fontSize:11)),
       trailing:const Icon(Icons.chevron_right,color:muted),onTap:onSearch,
     )))),
-    if(saved.isNotEmpty)...[const SizedBox(height:20),const _Heading('保存した動画'),...saved.take(3).map((v)=>VideoTile(video:v,onTap:()=>onPlay(v)))],
+    if(history.isNotEmpty)...[const SizedBox(height:20),const _Heading('最近見た動画','前回の学習をすぐ再開'),...history.take(5).map((v)=>VideoTile(video:v,onTap:()=>onPlay(v)))],\n    if(saved.isNotEmpty)...[const SizedBox(height:20),const _Heading('保存した動画'),...saved.take(3).map((v)=>VideoTile(video:v,onTap:()=>onPlay(v)))],
   ]);
 }
 
