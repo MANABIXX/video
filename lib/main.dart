@@ -253,8 +253,8 @@ class _OfflineTabState extends State<OfflineTab> {
 
   Future<void> _download(String title, String rawUrl) async {
     final uri = Uri.tryParse(rawUrl);
-    if (uri == null || !['http', 'https'].contains(uri.scheme) || uri.host.isEmpty) {
-      setState(() => _downloadError = '有効なHTTPS/HTTP動画ファイルURLを入力してください。');
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+      setState(() => _downloadError = 'HTTPSの動画ファイルURLを入力してください。');
       return;
     }
     final host = uri.host.toLowerCase();
@@ -263,8 +263,8 @@ class _OfflineTabState extends State<OfflineTab> {
       return;
     }
     final ext = uri.path.toLowerCase().split('.').last;
-    if (!['mp4', 'm4v', 'mov', 'webm'].contains(ext)) {
-      setState(() => _downloadError = '対応形式はMP4・M4V・MOV・WebMです。');
+    if (!['mp4', 'm4v', 'mov'].contains(ext)) {
+      setState(() => _downloadError = 'iPhoneとAndroidで再生できるMP4・M4V・MOVに対応しています。');
       return;
     }
     setState(() { _downloading = true; _progress = 0; _downloadError = null; });
