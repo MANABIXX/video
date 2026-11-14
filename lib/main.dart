@@ -201,6 +201,7 @@ class OfflineTab extends StatefulWidget {
 class _OfflineTabState extends State<OfflineTab> {
   static const _storageKey = 'offline_videos_v1';
   final _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(minutes: 30)));
+  CancelToken? _cancelToken;
   List<OfflineVideo> _items = [];
   bool _loading = true, _downloading = false;
   double _progress = 0;
@@ -267,13 +268,15 @@ class _OfflineTabState extends State<OfflineTab> {
       setState(() => _downloadError = 'iPhoneとAndroidで再生できるMP4・M4V・MOVに対応しています。');
       return;
     }
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
     setState(() { _downloading = true; _progress = 0; _downloadError = null; });
     String? target;
     try {
       final directory = await getApplicationDocumentsDirectory();
       final safeName = 'manabixx_${DateTime.now().microsecondsSinceEpoch}.$ext';
       target = '${directory.path}/$safeName';
-      final response = await _dio.download(rawUrl, target, deleteOnError: true,
+      final response = await _dio.download(rawUrl, target, deleteOnError: true, cancelToken: cancelToken,
         onReceiveProgress: (received, total) {
           if (mounted && total > 0) setState(() => _progress = received / total);
         });
@@ -289,10 +292,16 @@ class _OfflineTabState extends State<OfflineTab> {
       if (!mounted) return;
       setState(() => _items = [item, ..._items]);
       await _persist();
+    } on DioException catch (error) {
+      if (target != null) { final file = File(target); if (await file.exists()) await file.delete(); }
+      if (mounted && error.type != DioExceptionType.cancel) {
+        setState(() => _downloadError = '保存できませんでした: ${error.message ?? error.type.name}');
+      }
     } catch (error) {
       if (target != null) { final file = File(target); if (await file.exists()) await file.delete(); }
       if (mounted) setState(() => _downloadError = '保存できませんでした: $error');
     } finally {
+      if (identical(_cancelToken, cancelToken)) _cancelToken = null;
       if (mounted) setState(() { _downloading = false; _progress = 0; });
     }
   }
@@ -317,7 +326,13 @@ class _OfflineTabState extends State<OfflineTab> {
       const Expanded(child: Text('端末内に保存した動画を、圏外や移動中でも再生。保存データはこのアプリ内に保管されます。', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45))),
     ])),
     const SizedBox(height: 14),
-    FilledButton.icon(onPressed: _downloading ? null : _addDownload, icon: const Icon(Icons.download_rounded), label: const Text('動画ファイルを追加')),
+    Row(children: [
+      Expanded(child: FilledButton.icon(onPressed: _downloading ? null : _addDownload, icon: const Icon(Icons.download_rounded), label: const Text('動画ファイルを追加'))),
+      if (_downloading) ...[
+        const SizedBox(width: 8),
+        OutlinedButton.icon(onPressed: () => _cancelToken?.cancel('ユーザーがダウンロードをキャンセルしました'), icon: const Icon(Icons.close), label: const Text('中止')),
+      ],
+    ]),
     if (_downloading) ...[
       const SizedBox(height: 14), LinearProgressIndicator(value: _progress == 0 ? null : _progress),
       const SizedBox(height: 6), Text(_progress == 0 ? 'ダウンロード準備中…' : '${(_progress * 100).toStringAsFixed(0)}% 保存中', style: const TextStyle(color: muted, fontSize: 12)),
