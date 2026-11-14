@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
@@ -32,6 +32,7 @@ class VideoApp extends StatelessWidget {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
       ),
     ),
+    builder: (context, child) => MaterialUiCompatibilityBridge(child: child!),
     home: const Shell(),
   );
 }
@@ -312,7 +313,7 @@ class _OfflineTabState extends State<OfflineTab> {
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.fromLTRB(18, 18, 18, 28), children: [
     const _Heading('オフライン','保存した教材動画は通信なしで再生できます'),
     const SizedBox(height: 12),
-    Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(18)), child: Row(children: [
+    const Container(padding: EdgeInsets.all(16), decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.all(Radius.circular(18))), child: Row(children: [
       const Icon(Icons.wifi_off_rounded, color: accent, size: 26), const SizedBox(width: 12),
       const Expanded(child: Text('端末内に保存した動画を、圏外や移動中でも再生。保存データはこのアプリ内に保管されます。', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45))),
     ])),
