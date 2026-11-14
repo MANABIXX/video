@@ -1,331 +1,220 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
-void main() {
-  runApp(const ManabixxVideoApp());
-}
+const bg = Color(0xFF090B10);
+const panel = Color(0xFF151B25);
+const accent = Color(0xFF8AB4F8);
+const muted = Color(0xFF929BAA);
 
-class ManabixxVideoApp extends StatelessWidget {
-  const ManabixxVideoApp({super.key});
+void main() => runApp(const VideoApp());
 
+class VideoApp extends StatelessWidget {
+  const VideoApp({super.key});
   @override
-  Widget build(BuildContext context) {
-    const background = Color(0xFF0B0D12);
-    const surface = Color(0xFF151922);
-    const accent = Color(0xFF8AB4F8);
-
-    return MaterialApp(
-      title: 'MANABIXX Video',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: background,
-        colorScheme: const ColorScheme.dark(
-          primary: accent,
-          surface: surface,
-        ),
-        useMaterial3: true,
-        cardTheme: CardThemeData(
-          color: surface,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-        ),
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'MANABIXX Video',
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(
+      brightness: Brightness.dark, scaffoldBackgroundColor: bg,
+      colorScheme: const ColorScheme.dark(primary: accent, surface: panel),
+      useMaterial3: true,
+      appBarTheme: const AppBarTheme(backgroundColor: bg, surfaceTintColor: Colors.transparent),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true, fillColor: panel, hintStyle: const TextStyle(color: muted),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
       ),
-      home: const VideoHomePage(),
-    );
+    ),
+    home: const Shell(),
+  );
+}
+
+class Video {
+  const Video(this.id, this.title, this.channel, this.description, this.thumbnail);
+  final String id, title, channel, description, thumbnail;
+  factory Video.fromApi(Map<String,dynamic> j) {
+    final s=j['snippet'] as Map<String,dynamic>;
+    final t=s['thumbnails'] as Map<String,dynamic>;
+    final image=(t['high']??t['medium']??t['default']) as Map<String,dynamic>;
+    return Video((j['id'] as Map<String,dynamic>)['videoId'] as String,
+      s['title'] as String? ?? '', s['channelTitle'] as String? ?? '',
+      s['description'] as String? ?? '', image['url'] as String? ?? '');
   }
+  factory Video.fromJson(Map<String,dynamic> j) => Video(j['id'],j['title'],j['channel'],j['description'],j['thumbnail']);
+  Map<String,dynamic> toJson()=>{'id':id,'title':title,'channel':channel,'description':description,'thumbnail':thumbnail};
 }
 
-class VideoHomePage extends StatefulWidget {
-  const VideoHomePage({super.key});
-
-  @override
-  State<VideoHomePage> createState() => _VideoHomePageState();
+class Shell extends StatefulWidget {
+  const Shell({super.key});
+  @override State<Shell> createState()=>_ShellState();
 }
-
-class _VideoHomePageState extends State<VideoHomePage> {
-  static const subjects = [
-    ('数学', Icons.calculate_outlined),
-    ('英語', Icons.translate_rounded),
-    ('理科', Icons.science_outlined),
-    ('社会', Icons.public_rounded),
-    ('国語', Icons.menu_book_rounded),
-  ];
-
-  String? selectedSubject;
-  String searchQuery = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
+class _ShellState extends State<Shell> {
+  int tab=0; String apiKey=''; bool ready=false; List<Video> saved=[];
+  @override void initState(){super.initState();_load();}
+  Future<void> _load() async {
+    final p=await SharedPreferences.getInstance();
+    if(!mounted)return;
+    setState((){apiKey=p.getString('youtube_api_key')??'';saved=(p.getStringList('saved')??[]).map((s)=>Video.fromJson(jsonDecode(s))).toList();ready=true;});
+  }
+  Future<void> _keyDialog() async {
+    final c=TextEditingController(text:apiKey);
+    final v=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(
+      backgroundColor:panel,title:const Text('YouTube API設定'),
+      content:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[
+        const Text('動画検索にはYouTube Data API v3のAPIキーが必要です。Google Cloudで発行し、APIを制限したキーを登録してください。',style:TextStyle(color:muted,fontSize:13,height:1.5)),
+        const SizedBox(height:14),TextField(controller:c,obscureText:true,decoration:const InputDecoration(hintText:'APIキー')),
+      ]),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('キャンセル')),FilledButton(onPressed:()=>Navigator.pop(ctx,c.text),child:const Text('保存'))],
+    ));
+    c.dispose();
+    if(v!=null){final p=await SharedPreferences.getInstance();await p.setString('youtube_api_key',v.trim());if(mounted)setState(()=>apiKey=v.trim());}
+  }
+  Future<void> _toggle(Video v) async {
+    final exists=saved.any((x)=>x.id==v.id);
+    final next=[...saved.where((x)=>x.id!=v.id)];
+    if(!exists)next.insert(0,v);
+    final p=await SharedPreferences.getInstance();
+    await p.setStringList('saved',next.map((x)=>jsonEncode(x.toJson())).toList());
+    if(mounted)setState(()=>saved=next);
+  }
+  void _play(Video v)=>Navigator.push(context,MaterialPageRoute(builder:(_)=>PlayerPage(video:v,isSaved:saved.any((x)=>x.id==v.id),onSave:()=>_toggle(v))));
+  @override Widget build(BuildContext context){
+    if(!ready)return const Scaffold(body:Center(child:CircularProgressIndicator()));
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'MANABIXX Video',
-          style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -0.4),
-        ),
-        actions: [
-          IconButton(
-            tooltip: '検索欄へ移動',
-            onPressed: () => FocusScope.of(context).requestFocus(_searchFocus),
-            icon: const Icon(Icons.search_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF1C2A40), Color(0xFF151922)],
-                ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8AB4F8).withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: const Text(
-                      'LEARNING VIDEO SPACE',
-                      style: TextStyle(
-                        color: Color(0xFF9CC3FF),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '学びたいことを、\n動画でもっと深く。',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      height: 1.18,
-                      letterSpacing: -0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    '教科や単元から教材を整理して、自分のペースで学習。',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white70,
-                      height: 1.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 22),
-            TextField(
-              focusNode: _searchFocus,
-              onChanged: (value) => setState(() => searchQuery = value),
-              decoration: InputDecoration(
-                hintText: '動画・単元・キーワードを検索',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: searchQuery.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: '検索をクリア',
-                        onPressed: () => setState(() => searchQuery = ''),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                filled: true,
-                fillColor: const Color(0xFF151922),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-            const SizedBox(height: 28),
-            Row(
-              children: [
-                Text(
-                  '教科から探す',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const Spacer(),
-                if (selectedSubject != null)
-                  TextButton(
-                    onPressed: () => setState(() => selectedSubject = null),
-                    child: const Text('解除'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 9,
-              runSpacing: 10,
-              children: [
-                for (final subject in subjects)
-                  _SubjectChip(
-                    label: subject.$1,
-                    icon: subject.$2,
-                    selected: selectedSubject == subject.$1,
-                    onPressed: () => setState(() {
-                      selectedSubject =
-                          selectedSubject == subject.$1 ? null : subject.$1;
-                    }),
-                  ),
-              ],
-            ),
-            if (selectedSubject != null || searchQuery.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.tune_rounded, color: Color(0xFF9CC3FF)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          [
-                            if (selectedSubject != null) selectedSubject!,
-                            if (searchQuery.isNotEmpty) '「$searchQuery」',
-                          ].join(' ・ '),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      const Text(
-                        '教材連携準備中',
-                        style: TextStyle(color: Colors.white54, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 30),
-            Text(
-              'マイライブラリ',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8AB4F8).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(
-                        Icons.bookmarks_outlined,
-                        color: Color(0xFF9CC3FF),
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '保存した動画はまだありません',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          SizedBox(height: 6),
-                          Text(
-                            '教材を見つけたら保存して、ここからすぐに見返せるようにします。',
-                            style: TextStyle(
-                              color: Colors.white60,
-                              height: 1.45,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Center(
-              child: Text(
-                'MANABIXX VIDEO  ·  EARLY ACCESS',
-                style: TextStyle(
-                  color: Colors.white30,
-                  fontSize: 10,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      appBar:AppBar(title:const Row(children:[Icon(Icons.play_circle_fill_rounded,color:accent),SizedBox(width:8),Text('MANABIXX',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:-.5)),SizedBox(width:6),Text('VIDEO',style:TextStyle(color:accent,fontSize:12,fontWeight:FontWeight.w900,letterSpacing:1.2))]),
+        actions:[IconButton(onPressed:_keyDialog,icon:const Icon(Icons.tune_rounded),tooltip:'設定')]),
+      body:IndexedStack(index:tab,children:[
+        HomeTab(onSearch:()=>setState(()=>tab=1),saved:saved,onPlay:_play),
+        SearchTab(apiKey:apiKey,saved:saved,onPlay:_play,onSave:_toggle,onSettings:_keyDialog),
+        LibraryTab(saved:saved,onPlay:_play,onRemove:_toggle),
+      ]),
+      bottomNavigationBar:NavigationBar(backgroundColor:panel,selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),
+        destinations:const[
+          NavigationDestination(icon:Icon(Icons.home_outlined),selectedIcon:Icon(Icons.home),label:'ホーム'),
+          NavigationDestination(icon:Icon(Icons.search),label:'検索'),
+          NavigationDestination(icon:Icon(Icons.bookmarks_outlined),selectedIcon:Icon(Icons.bookmarks),label:'ライブラリ'),
+        ]),
     );
-  }
-
-  final FocusNode _searchFocus = FocusNode();
-
-  @override
-  void dispose() {
-    _searchFocus.dispose();
-    super.dispose();
   }
 }
 
-class _SubjectChip extends StatelessWidget {
-  const _SubjectChip({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onPressed,
-  });
+class HomeTab extends StatelessWidget {
+  const HomeTab({super.key,required this.onSearch,required this.saved,required this.onPlay});
+  final VoidCallback onSearch; final List<Video> saved; final ValueChanged<Video> onPlay;
+  static const subjects=[('数学',Icons.calculate_rounded),('英語',Icons.translate_rounded),('理科',Icons.science_rounded),('社会',Icons.public_rounded),('国語',Icons.menu_book_rounded)];
+  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.fromLTRB(18,8,18,28),children:[
+    Container(padding:const EdgeInsets.all(22),decoration:BoxDecoration(borderRadius:BorderRadius.circular(24),gradient:const LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,colors:[Color(0xFF203653),Color(0xFF151B27),Color(0xFF10141C)]),border:Border.all(color:Colors.white10)),
+      child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        const Text('YOUR LEARNING, YOUR FLOW',style:TextStyle(color:accent,fontSize:10,fontWeight:FontWeight.w900,letterSpacing:1.4)),
+        const SizedBox(height:16),const Text('動画で学ぶ。\n集中を、止めない。',style:TextStyle(fontSize:28,height:1.2,fontWeight:FontWeight.w900,letterSpacing:-.8)),
+        const SizedBox(height:10),const Text('見つける、再生する、あとで見返す。学習動画をひとつの場所に。',style:TextStyle(color:Colors.white70,height:1.5,fontSize:13)),
+        const SizedBox(height:20),FilledButton.icon(onPressed:onSearch,icon:const Icon(Icons.search),label:const Text('動画を探す'),style:FilledButton.styleFrom(backgroundColor:accent,foregroundColor:bg)),
+      ])),
+    const SizedBox(height:28),const _Heading('教科から探す','学びたい分野へすぐアクセス'),const SizedBox(height:12),
+    ...subjects.map((s)=>Padding(padding:const EdgeInsets.only(bottom:9),child:Material(color:panel,borderRadius:BorderRadius.circular(16),child:ListTile(
+      leading:Container(width:42,height:42,decoration:BoxDecoration(color:accent.withValues(alpha:.12),borderRadius:BorderRadius.circular(13)),child:Icon(s.$2,color:accent)),
+      title:Text(s.$1,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:const Text('学習動画を検索',style:TextStyle(color:muted,fontSize:11)),
+      trailing:const Icon(Icons.chevron_right,color:muted),onTap:onSearch,
+    )))),
+    if(saved.isNotEmpty)...[const SizedBox(height:20),const _Heading('保存した動画'),...saved.take(3).map((v)=>VideoTile(video:v,onTap:()=>onPlay(v)))],
+  ]);
+}
 
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilterChip(
-      avatar: Icon(icon, size: 18),
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onPressed(),
-      showCheckmark: false,
-      backgroundColor: const Color(0xFF151922),
-      selectedColor: const Color(0xFF263B59),
-      side: BorderSide(
-        color: selected ? const Color(0xFF8AB4F8) : Colors.white12,
-      ),
-      labelStyle: TextStyle(
-        color: selected ? const Color(0xFFB8D4FF) : Colors.white,
-        fontWeight: FontWeight.w600,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    );
+class SearchTab extends StatefulWidget {
+  const SearchTab({super.key,required this.apiKey,required this.saved,required this.onPlay,required this.onSave,required this.onSettings});
+  final String apiKey; final List<Video> saved; final ValueChanged<Video> onPlay,onSave; final VoidCallback onSettings;
+  @override State<SearchTab> createState()=>_SearchTabState();
+}
+class _SearchTabState extends State<SearchTab>{
+  final c=TextEditingController();List<Video> results=[];bool loading=false;String? error;
+  Future<void> search([String? preset]) async {
+    final q=(preset??c.text).trim();if(q.isEmpty)return;
+    if(widget.apiKey.isEmpty){setState(()=>error='検索するには先にYouTube APIキーを設定してください。');return;}
+    setState((){loading=true;error=null;results=[];});
+    try{
+      final uri=Uri.https('www.googleapis.com','/youtube/v3/search',{'part':'snippet','type':'video','maxResults':'25','q':q,'regionCode':'JP','relevanceLanguage':'ja','safeSearch':'moderate','key':widget.apiKey});
+      final r=await http.get(uri).timeout(const Duration(seconds:20));final data=jsonDecode(r.body) as Map<String,dynamic>;
+      if(r.statusCode!=200){final msg=(data['error'] as Map<String,dynamic>?)?['message'];throw Exception(msg??'API error ${r.statusCode}');}
+      final list=(data['items'] as List<dynamic>???[]).map((x)=>Video.fromApi(x as Map<String,dynamic>)).toList();
+      if(mounted)setState(()=>results=list);
+    }catch(e){if(mounted)setState(()=>error='検索できませんでした。APIキーと通信環境を確認してください。\n$e');}
+    finally{if(mounted)setState(()=>loading=false);}
   }
+  @override void dispose(){c.dispose();super.dispose();}
+  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.fromLTRB(18,18,18,28),children:[
+    const _Heading('動画を検索','YouTube上の学習動画を探す'),const SizedBox(height:16),
+    Row(children:[Expanded(child:TextField(controller:c,textInputAction:TextInputAction.search,onSubmitted:(_)=>search(),decoration:const InputDecoration(hintText:'例：中学理科 天体 解説',prefixIcon:Icon(Icons.search)))),
+      const SizedBox(width:8),IconButton.filled(onPressed:loading?null:()=>search(),icon:const Icon(Icons.arrow_forward),style:IconButton.styleFrom(backgroundColor:accent,foregroundColor:bg,minimumSize:const Size(52,52)))]),
+    const SizedBox(height:12),Wrap(spacing:8,runSpacing:8,children:['中学数学','英検準2級','高校入試 理科','歴史 解説'].map((q)=>ActionChip(label:Text(q),backgroundColor:panel,side:BorderSide.none,onPressed:loading?null:(){c.text=q;search(q);})).toList()),
+    if(widget.apiKey.isEmpty)...[const SizedBox(height:20),_Info(icon:Icons.key,title:'APIキーを設定',message:'Google CloudでYouTube Data API v3を有効にし、APIキーを登録してください。',action:TextButton(onPressed:widget.onSettings,child:const Text('設定を開く')))],
+    if(loading)const Padding(padding:EdgeInsets.all(30),child:Center(child:CircularProgressIndicator())),
+    if(error!=null)...[const SizedBox(height:18),_Info(icon:Icons.info_outline,title:'検索できません',message:error!)],
+    if(results.isNotEmpty)...[const SizedBox(height:22),_Heading('検索結果','${results.length}件'),const SizedBox(height:10),...results.map((v)=>VideoTile(video:v,onTap:()=>widget.onPlay(v),trailing:IconButton(onPressed:()=>widget.onSave(v),icon:Icon(widget.saved.any((x)=>x.id==v.id)?Icons.bookmark:Icons.bookmark_add_outlined,color:accent))))],
+  ]);
+}
+
+class LibraryTab extends StatelessWidget{
+  const LibraryTab({super.key,required this.saved,required this.onPlay,required this.onRemove});
+  final List<Video> saved;final ValueChanged<Video> onPlay,onRemove;
+  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.fromLTRB(18,18,18,28),children:[
+    const _Heading('マイライブラリ','保存した動画をいつでも見返す'),const SizedBox(height:16),
+    if(saved.isEmpty)const _Info(icon:Icons.bookmarks_outlined,title:'保存した動画はまだありません',message:'検索結果のブックマークから動画を保存できます。')
+    else ...saved.map((v)=>VideoTile(video:v,onTap:()=>onPlay(v),trailing:IconButton(onPressed:()=>onRemove(v),icon:const Icon(Icons.bookmark_remove_outlined,color:muted)))),
+  ]);
+}
+
+class PlayerPage extends StatefulWidget{
+  const PlayerPage({super.key,required this.video,required this.isSaved,required this.onSave});
+  final Video video;final bool isSaved;final VoidCallback onSave;
+  @override State<PlayerPage> createState()=>_PlayerPageState();
+}
+class _PlayerPageState extends State<PlayerPage>{
+  late final YoutubePlayerController controller;
+  @override void initState(){super.initState();controller=YoutubePlayerController.fromVideoId(videoId:widget.video.id,autoPlay:true,params:const YoutubePlayerParams(showControls:true,showFullscreenButton:true,interfaceLanguage:'ja',captionLanguage:'ja',enableCaption:true,playsInline:true,strictRelatedVideos:true));}
+  @override void dispose(){controller.close();super.dispose();}
+  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('再生中')),body:ListView(children:[
+    YoutubePlayer(controller:controller,aspectRatio:16/9),
+    Padding(padding:const EdgeInsets.all(18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(widget.video.title,style:const TextStyle(fontSize:19,fontWeight:FontWeight.w800,height:1.35)),
+      const SizedBox(height:8),Text(widget.video.channel,style:const TextStyle(color:muted)),
+      const SizedBox(height:14),OutlinedButton.icon(onPressed:widget.onSave,icon:Icon(widget.isSaved?Icons.bookmark:Icons.bookmark_add_outlined),label:Text(widget.isSaved?'保存済み':'保存する')),
+      const Divider(height:32,color:Colors.white12),const Text('概要',style:TextStyle(fontWeight:FontWeight.w800)),const SizedBox(height:8),
+      Text(widget.video.description.isEmpty?'説明はありません。':widget.video.description,style:const TextStyle(color:Colors.white70,height:1.55)),
+      const SizedBox(height:18),const Text('YouTube公式IFrame Player APIを使用しています。広告除去や有料機能の回避は行いません。',style:TextStyle(color:muted,fontSize:11,height:1.5)),
+    ])),
+  ]));
+}
+
+class VideoTile extends StatelessWidget{
+  const VideoTile({super.key,required this.video,required this.onTap,this.trailing});
+  final Video video;final VoidCallback onTap;final Widget? trailing;
+  @override Widget build(BuildContext context)=>Padding(padding:const EdgeInsets.only(bottom:11),child:Material(color:panel,borderRadius:BorderRadius.circular(16),clipBehavior:Clip.antiAlias,child:InkWell(onTap:onTap,child:Row(children:[
+    SizedBox(width:128,height:84,child:Stack(fit:StackFit.expand,children:[
+      Image.network(video.thumbnail,fit:BoxFit.cover,errorBuilder:(_,__,___)=>const ColoredBox(color:panel,child:Icon(Icons.video_library_outlined))),
+      const Align(alignment:Alignment.center,child:Icon(Icons.play_circle_fill,color:Colors.white,size:34)),
+    ])),
+    Expanded(child:Padding(padding:const EdgeInsets.fromLTRB(11,9,3,9),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Text(video.title,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w700,fontSize:13,height:1.3)),
+      const SizedBox(height:6),Text(video.channel,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:muted,fontSize:11)),
+    ]))),
+    if(trailing!=null)trailing!,
+  ]))));
+}
+
+class _Heading extends StatelessWidget{
+  const _Heading(this.title,[this.sub]);final String title;final String? sub;
+  @override Widget build(BuildContext context)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    Text(title,style:const TextStyle(fontSize:20,fontWeight:FontWeight.w900,letterSpacing:-.4)),
+    if(sub!=null)...[const SizedBox(height:4),Text(sub!,style:const TextStyle(color:muted,fontSize:12))],
+  ]);
+}
+class _Info extends StatelessWidget{
+  const _Info({required this.icon,required this.title,required this.message,this.action});
+  final IconData icon;final String title,message;final Widget? action;
+  @override Widget build(BuildContext context)=>Container(padding:const EdgeInsets.all(18),decoration:BoxDecoration(color:panel,borderRadius:BorderRadius.circular(18)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    Icon(icon,color:accent,size:25),const SizedBox(height:12),Text(title,style:const TextStyle(fontWeight:FontWeight.w800)),const SizedBox(height:7),
+    Text(message,style:const TextStyle(color:muted,fontSize:12,height:1.5)),if(action!=null)action!,
+  ]));
 }
